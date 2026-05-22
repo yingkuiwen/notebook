@@ -1,0 +1,31 @@
+[
+    {
+        "caretX": 1,
+        "caretY": 130,
+        "filename": "D:/soft/RedPanda-CPP/projects/Project1/main.cpp",
+        "focused": true,
+        "isOpen": true,
+        "left": 0,
+        "order": 0,
+        "top": 2500
+    },
+    {
+        "caretX": 1,
+        "caretY": 1,
+        "filename": "D:/soft/RedPanda-CPP/projects/Project1/resource.rc",
+        "focused": false,
+        "isOpen": false,
+        "left": 0,
+        "top": 0
+    },
+    {
+        "caretX": 1,
+        "caretY": 1,
+        "filename": "D:/soft/RedPanda-CPP/projects/Project1/main.h",
+        "focused": false,
+        "isOpen": true,
+        "left": 0,
+        "order": 1,
+        "top": 0
+    }
+]
