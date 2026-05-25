@@ -1,5 +1,6 @@
 #include <windows.h>
 #include "main.h"
+#include <tchar.h>
 
 BOOL LoadFile(HWND hEdit, LPSTR pszFileName) {
 	HANDLE hFile;
@@ -150,10 +151,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,LPSTR lpCmdLine,
 		return 0;
 	}
 
-	hwnd = CreateWindowEx(WS_EX_CLIENTEDGE,"WindowClass","File Editor Example Program",WS_OVERLAPPEDWINDOW,
+	hwnd = CreateWindowEx(WS_EX_CLIENTEDGE,"WindowClass",_T("我的文件编辑器"),WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
-		320,240,
+		700,500,
 		NULL, NULL, hInstance, NULL);
 
 	if(hwnd == NULL) {
@@ -161,7 +162,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,LPSTR lpCmdLine,
 		return 0;
 	}
 
-	ShowWindow(hwnd,1);
+	ShowWindow(hwnd,SW_MAXIMIZE);
 	UpdateWindow(hwnd);
 
 	while(GetMessage(&Msg, NULL, 0, 0) > 0) {
