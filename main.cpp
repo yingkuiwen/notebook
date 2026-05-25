@@ -2,12 +2,7 @@
 #include "main.h"
 #include <tchar.h>
 
-// 按钮ID
-#define BTN_OPEN    1001
-#define BTN_SAVE    1002
-#define BTN_EXIT    1003
-
-// 自动识别编码读取文件（不乱码）
+// 辅助函数：检查是否为 UTF-8 无 BOM
 bool CheckUTF8String(const char* pData, int nLen)
 {
 	int nBytes = 0;
@@ -15,6 +10,7 @@ bool CheckUTF8String(const char* pData, int nLen)
 	{
 		BYTE c = (BYTE)pData[i];
 		if (c == 0) return true;
+		
 		if (nBytes == 0)
 		{
 			if ((c >> 7) == 0)      continue;
@@ -32,6 +28,9 @@ bool CheckUTF8String(const char* pData, int nLen)
 	return true;
 }
 
+// ==============================
+// 🔥 新版 LoadFile：自动识别编码，永远不乱码
+// ==============================
 BOOL LoadFile(HWND hEdit, LPCSTR pszFileName) {
 	HANDLE hFile = CreateFileA(pszFileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0);
 	if (hFile == INVALID_HANDLE_VALUE) return FALSE;
@@ -48,36 +47,51 @@ BOOL LoadFile(HWND hEdit, LPCSTR pszFileName) {
 	
 	wchar_t* wideStr = NULL;
 	
-	if (fileSize >= 3 && (BYTE)buffer[0] == 0xEF && (BYTE)buffer[1] == 0xBB && (BYTE)buffer[2] == 0xBF)
+	// 自动识别编码
+	if (fileSize >= 3 &&
+		(BYTE)buffer[0] == 0xEF &&
+		(BYTE)buffer[1] == 0xBB &&
+		(BYTE)buffer[2] == 0xBF)
 	{
+		// UTF-8 带 BOM
 		int wlen = MultiByteToWideChar(CP_UTF8, 0, buffer + 3, -1, NULL, 0);
 		wideStr = (wchar_t*)GlobalAlloc(GPTR, wlen * 2);
 		MultiByteToWideChar(CP_UTF8, 0, buffer + 3, -1, wideStr, wlen);
 	}
-	else if (fileSize >= 2 && (BYTE)buffer[0] == 0xFF && (BYTE)buffer[1] == 0xFE)
+	else if (fileSize >= 2 &&
+			 (BYTE)buffer[0] == 0xFF &&
+			 (BYTE)buffer[1] == 0xFE)
 	{
+		// UTF-16 LE
 		wideStr = (wchar_t*)GlobalAlloc(GPTR, fileSize);
 		memcpy(wideStr, buffer + 2, fileSize - 2);
 	}
 	else if (CheckUTF8String(buffer, readLen))
 	{
+		// UTF-8 无签名 ✅ 你现在的文件
 		int wlen = MultiByteToWideChar(CP_UTF8, 0, buffer, -1, NULL, 0);
 		wideStr = (wchar_t*)GlobalAlloc(GPTR, wlen * 2);
 		MultiByteToWideChar(CP_UTF8, 0, buffer, -1, wideStr, wlen);
 	}
 	else
 	{
+		// ANSI / GBK
 		int wlen = MultiByteToWideChar(CP_ACP, 0, buffer, -1, NULL, 0);
 		wideStr = (wchar_t*)GlobalAlloc(GPTR, wlen * 2);
 		MultiByteToWideChar(CP_ACP, 0, buffer, -1, wideStr, wlen);
 	}
 	
 	GlobalFree(buffer);
+	
+	// 显示到编辑框
 	BOOL bSuccess = SetWindowTextW(hEdit, wideStr);
 	GlobalFree(wideStr);
 	return bSuccess;
 }
 
+// ==============================
+// 🔥 新版 SaveFile：默认保存为 UTF-8 无签名（全平台兼容）
+// ==============================
 BOOL SaveFile(HWND hEdit, LPCSTR pszFileName) {
 	int len = GetWindowTextLengthW(hEdit);
 	if (len <= 0) return FALSE;
@@ -85,6 +99,7 @@ BOOL SaveFile(HWND hEdit, LPCSTR pszFileName) {
 	wchar_t* wideText = (wchar_t*)GlobalAlloc(GPTR, (len + 2) * sizeof(wchar_t));
 	GetWindowTextW(hEdit, wideText, len + 1);
 	
+	// 转为 UTF-8
 	int utf8Len = WideCharToMultiByte(CP_UTF8, 0, wideText, -1, NULL, 0, NULL, NULL);
 	char* utf8Buf = (char*)GlobalAlloc(GPTR, utf8Len);
 	WideCharToMultiByte(CP_UTF8, 0, wideText, -1, utf8Buf, utf8Len, NULL, NULL);
@@ -108,6 +123,7 @@ BOOL SaveFile(HWND hEdit, LPCSTR pszFileName) {
 BOOL DoFileOpenSave(HWND hwnd, BOOL bSave) {
 	OPENFILENAMEA ofn;
 	char szFileName[MAX_PATH];
+	
 	ZeroMemory(&ofn, sizeof(ofn));
 	szFileName[0] = 0;
 	
@@ -122,7 +138,7 @@ BOOL DoFileOpenSave(HWND hwnd, BOOL bSave) {
 		ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT;
 		if (GetSaveFileNameA(&ofn)) {
 			if (!SaveFile(GetDlgItem(hwnd, IDC_MAIN_TEXT), szFileName)) {
-				MessageBoxA(hwnd, "保存失败", "Error", MB_OK | MB_ICONEXCLAMATION);
+				MessageBoxA(hwnd, "Save file failed.", "Error", MB_OK | MB_ICONEXCLAMATION);
 				return FALSE;
 			}
 		}
@@ -131,7 +147,7 @@ BOOL DoFileOpenSave(HWND hwnd, BOOL bSave) {
 		ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
 		if (GetOpenFileNameA(&ofn)) {
 			if (!LoadFile(GetDlgItem(hwnd, IDC_MAIN_TEXT), szFileName)) {
-				MessageBoxA(hwnd, "打开失败", "Error", MB_OK | MB_ICONEXCLAMATION);
+				MessageBoxA(hwnd, "Load of file failed.", "Error", MB_OK | MB_ICONEXCLAMATION);
 				return FALSE;
 			}
 		}
@@ -139,102 +155,85 @@ BOOL DoFileOpenSave(HWND hwnd, BOOL bSave) {
 	return TRUE;
 }
 
-// ==============================
-// 窗口过程（修复无限弹窗）
-// ==============================
 LRESULT CALLBACK WndProc(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam) {
 	switch (Message) {
 	case WM_CREATE:
-		// 创建文本框
 		CreateWindowA("EDIT", "", WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL | ES_MULTILINE | ES_WANTRETURN,
-					  0, 0, CW_USEDEFAULT, CW_USEDEFAULT,
+					  CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
 					  hwnd, (HMENU)IDC_MAIN_TEXT, GetModuleHandle(NULL), NULL);
 		SendDlgItemMessage(hwnd, IDC_MAIN_TEXT, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), MAKELPARAM(TRUE, 0));
 		break;
-		
 	case WM_SIZE:
 		if (wParam != SIZE_MINIMIZED)
 			MoveWindow(GetDlgItem(hwnd, IDC_MAIN_TEXT), 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
 		break;
-		
 	case WM_SETFOCUS:
 		SetFocus(GetDlgItem(hwnd, IDC_MAIN_TEXT));
 		break;
-		
 	case WM_COMMAND:
-		// 只处理菜单/按钮，修复死循环
-		if(HIWORD(wParam) == 0 || HIWORD(wParam) == BN_CLICKED)
-		{
-			switch (LOWORD(wParam)) {
-			case CM_FILE_OPEN:
-				DoFileOpenSave(hwnd, FALSE);
-				break;
-			case CM_FILE_SAVEAS:
-				DoFileOpenSave(hwnd, TRUE);
-				break;
-			case CM_FILE_EXIT:
-				PostMessage(hwnd, WM_CLOSE, 0, 0);
-				break;
-			case CM_ABOUT:
-				MessageBoxA(NULL, "文件编辑器", "关于", 0);
-				break;
-			}
+		switch (LOWORD(wParam)) {
+		case CM_FILE_OPEN:
+			DoFileOpenSave(hwnd, FALSE);
+			break;
+		case CM_FILE_SAVEAS:
+			DoFileOpenSave(hwnd, TRUE);
+			break;
+		case CM_FILE_EXIT:
+			PostMessage(hwnd, WM_CLOSE, 0, 0);
+			break;
+		case CM_ABOUT:
+			MessageBoxA(NULL, "File Editor for Windows!\nCreated using the Win32 API", "About...", 0);
+			break;
 		}
 		break;
-		
 	case WM_CLOSE:
 		DestroyWindow(hwnd);
 		break;
-		
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		break;
-		
 	default:
 		return DefWindowProc(hwnd, Message, wParam, lParam);
 	}
 	return 0;
 }
 
-// ==============================
-// 主函数
-// ==============================
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
 	WNDCLASSEX wc;
 	HWND hwnd;
 	MSG Msg;
 	
-	wc.cbSize        = sizeof(WNDCLASSEX);
-	wc.style         = CS_HREDRAW | CS_VREDRAW;
-	wc.lpfnWndProc   = WndProc;
-	wc.cbClsExtra    = 0;
-	wc.cbWndExtra    = 0;
-	wc.hInstance     = hInstance;
-	wc.hIcon         = LoadIcon(NULL, IDI_APPLICATION);
-	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
-	wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
-	wc.lpszMenuName  = "MAINMENU";
+	wc.cbSize = sizeof(WNDCLASSEX);
+	wc.style = CS_HREDRAW | CS_VREDRAW;
+	wc.lpfnWndProc = WndProc;
+	wc.cbClsExtra = 0;
+	wc.cbWndExtra = 0;
+	wc.hInstance = hInstance;
+	wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+	wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wc.lpszMenuName = "MAINMENU";
 	wc.lpszClassName = "WindowClass";
-	wc.hIconSm       = LoadIcon(hInstance, "A");
+	wc.hIconSm = LoadIcon(hInstance, "A");
 	
-	if(!RegisterClassEx(&wc)) {
-		MessageBoxA(0, "窗口注册失败!", "错误", MB_ICONEXCLAMATION | MB_OK);
+	if (!RegisterClassEx(&wc)) {
+		MessageBoxA(0, "Window Registration Failed!", "Error!", MB_ICONEXCLAMATION | MB_OK | MB_SYSTEMMODAL);
 		return 0;
 	}
 	
-	hwnd = CreateWindowExA(WS_EX_CLIENTEDGE, "WindowClass", "我的文件编辑器",
-						   WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
+	hwnd = CreateWindowExA(WS_EX_CLIENTEDGE, "WindowClass", "我的文件编辑器", WS_OVERLAPPEDWINDOW,
+						   CW_USEDEFAULT, CW_USEDEFAULT, 700, 500,
 						   NULL, NULL, hInstance, NULL);
 	
-	if(hwnd == NULL) {
-		MessageBoxA(0, "窗口创建失败!", "错误", MB_ICONEXCLAMATION | MB_OK);
+	if (hwnd == NULL) {
+		MessageBoxA(0, "Window Creation Failed!", "Error!", MB_ICONEXCLAMATION | MB_OK | MB_SYSTEMMODAL);
 		return 0;
 	}
 	
 	ShowWindow(hwnd, SW_MAXIMIZE);
 	UpdateWindow(hwnd);
 	
-	while(GetMessage(&Msg, NULL, 0, 0) > 0) {
+	while (GetMessage(&Msg, NULL, 0, 0) > 0) {
 		TranslateMessage(&Msg);
 		DispatchMessage(&Msg);
 	}
